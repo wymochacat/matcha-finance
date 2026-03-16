@@ -5,9 +5,9 @@ import {
   signInAnonymously, 
   signOut,
   onAuthStateChanged,
-  GoogleAuthProvider,   // ← 新增：Google 登入提供者
-  signInWithPopup,      // ← 新增：用彈出視窗登入
-  linkWithPopup         // ← 新增：匿名帳號升級用
+  GoogleAuthProvider,
+  signInWithPopup,
+  linkWithPopup
 } from "firebase/auth";
 import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { PlusCircle, MinusCircle, PieChart as PieChartIcon, List, Wallet, Search, Trash2, Settings, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
@@ -122,36 +122,32 @@ export default function App() {
       if (formDetailsRef.current) formDetailsRef.current.open = false;
     } catch (err) { console.error(err); }
   };
-// 【情況一】使用者是第一次用，目前是匿名狀態
-// 用「升級」的方式連結 Google，保留原有資料
-const linkWithGoogle = async () => {
-  try {
-    await linkWithPopup(auth.currentUser, googleProvider);
-    alert("帳號連結成功！以後登入都能看到這些資料 ✓");
-  } catch (error) {
-    if (error.code === 'auth/credential-already-in-use') {
-      alert("這個 Google 帳號已經被使用過了");
-    } else {
-      alert("連結失敗：" + error.message);
+
+  const linkWithGoogle = async () => {
+    try {
+      await linkWithPopup(auth.currentUser, googleProvider);
+      alert("帳號連結成功！以後登入都能看到這些資料 ✓");
+    } catch (error) {
+      if (error.code === 'auth/credential-already-in-use') {
+        alert("這個 Google 帳號已經被使用過了");
+      } else {
+        alert("連結失敗：" + error.message);
+      }
     }
-  }
-};
+  };
 
-// 【情況二】使用者已經登出，要重新登入
-const signInWithGoogle = async () => {
-  try {
-    await signInWithPopup(auth, googleProvider);
-    // 登入成功，onAuthStateChanged 會自動更新 user 狀態
-  } catch (error) {
-    alert("登入失敗：" + error.message);
-  }
-};
+  const signInWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      alert("登入失敗：" + error.message);
+    }
+  };
 
-// 【登出】
-const handleSignOut = async () => {
-  await signOut(auth); // 記得在 import 加上 signOut
-  // 登出後 onAuthStateChanged 會偵測到，自動執行 signInAnonymously
-};
+  const handleSignOut = async () => {
+    await signOut(auth);
+  };
+
   const deleteTx = async (id) => {
     if (!user) return;
     try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'transactions', id)); }
@@ -197,58 +193,58 @@ const handleSignOut = async () => {
 
   return (
     <div className={`min-h-screen ${d.bg} pb-32 ${d.text} transition-colors duration-300`}>
+
+      {/* ===== HEADER ===== */}
       <header className="bg-[#8FB996] text-white p-6 pt-16 rounded-b-[3rem] shadow-xl sticky top-0 z-40">
         <div className="max-w-2xl mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-black tracking-tighter">抹茶記帳</h1>
             <div className="flex gap-2">
-  <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-white/20 rounded-2xl">
-    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-  </button>
-
-  
-
-  {showSettings && (
-  <div className={`${d.card} rounded-3xl p-6 shadow-lg mb-8 space-y-6`}>
-    
-    <div>
-      <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>每月預算限制</h3>
-      <div className="flex gap-3">
-        <input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
-        <button onClick={() => setShowSettings(false)} className="bg-[#596D48] text-white px-6 rounded-2xl font-black">儲存</button>
-      </div>
-    </div>
-
-    <div className={`border-t ${d.borderColor} pt-6`}>
-      <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>帳號</h3>
-      {user?.isAnonymous ? (
-        <div>
-          <p className={`text-xs ${d.textMuted} mb-3`}>連結 Google 帳號後，換手機也能看到所有資料</p>
-          <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
-            連結 Google 帳號
-          </button>
+              <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-white/20 rounded-2xl">
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              <button onClick={() => setShowSettings(!showSettings)} className="p-3 bg-white/20 rounded-2xl">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <div className="bg-[#596D48]/80 p-6 rounded-[2.5rem] text-center">
+            <p className="text-[#C2D5A8] text-xs font-bold mb-1">我的資產總計</p>
+            <div className="text-4xl font-black">${stats.balance.toLocaleString()}</div>
+          </div>
         </div>
-      ) : (
-        <div>
-          <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email}</p>
-          <button onClick={handleSignOut} className="w-full py-4 rounded-2xl bg-red-400 text-white font-black text-sm">
-            登出
-          </button>
-        </div>
-      )}
-    </div>
-
-  </div>
-)}
       </header>
 
+      {/* ===== MAIN ===== */}
       <main className="max-w-2xl mx-auto px-5 mt-8">
+
+        {/* 設定面板（齒輪打開後顯示） */}
         {showSettings && (
-          <div className={`${d.card} rounded-3xl p-6 shadow-lg mb-8`}>
-            <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>每月預算限制</h3>
-            <div className="flex gap-3">
-              <input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
-              <button onClick={() => setShowSettings(false)} className="bg-[#596D48] text-white px-6 rounded-2xl font-black">儲存</button>
+          <div className={`${d.card} rounded-3xl p-6 shadow-lg mb-8 space-y-6`}>
+            <div>
+              <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>每月預算限制</h3>
+              <div className="flex gap-3">
+                <input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
+                <button onClick={() => setShowSettings(false)} className="bg-[#596D48] text-white px-6 rounded-2xl font-black">儲存</button>
+              </div>
+            </div>
+            <div className={`border-t ${d.borderColor} pt-6`}>
+              <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>帳號</h3>
+              {user?.isAnonymous ? (
+                <div>
+                  <p className={`text-xs ${d.textMuted} mb-3`}>連結 Google 帳號後，換手機也能看到所有資料</p>
+                  <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
+                    連結 Google 帳號
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email}</p>
+                  <button onClick={handleSignOut} className="w-full py-4 rounded-2xl bg-red-400 text-white font-black text-sm">
+                    登出
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -378,6 +374,7 @@ const handleSignOut = async () => {
         )}
       </main>
 
+      {/* ===== NAV ===== */}
       <nav className={`fixed bottom-0 left-0 right-0 ${d.nav} backdrop-blur-xl border-t pb-8 pt-4 px-14 flex justify-between items-center z-50`}>
         <button onClick={() => setActiveTab('list')} className={`flex flex-col items-center gap-1 ${activeTab === 'list' ? 'text-[#596D48]' : d.textMuted}`}>
           <List className="w-6 h-6" />
