@@ -206,30 +206,40 @@ const handleSignOut = async () => {
     {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
   </button>
 
-  {user?.isAnonymous ? (
-    <button onClick={linkWithGoogle} className="p-3 bg-white/20 rounded-2xl text-xs font-black">
-      Google 登入
-    </button>
-  ) : (
-    <div className="flex items-center gap-2">
-      <span className="text-xs opacity-70">{user?.email}</span>
-      <button onClick={handleSignOut} className="p-3 bg-white/20 rounded-2xl text-xs font-black">
-        登出
-      </button>
-    </div>
-  )}
+  
 
-  <button onClick={() => setShowSettings(!showSettings)} className="p-3 bg-white/20 rounded-2xl">
-    <Settings className="w-5 h-5" />
-  </button>
-</div>
-            </div>
-          </div>
-          <div className="bg-[#596D48]/80 p-6 rounded-[2.5rem] text-center">
-            <p className="text-[#C2D5A8] text-xs font-bold mb-1">我的資產總計</p>
-            <div className="text-4xl font-black">${stats.balance.toLocaleString()}</div>
-          </div>
+  {showSettings && (
+  <div className={`${d.card} rounded-3xl p-6 shadow-lg mb-8 space-y-6`}>
+    
+    <div>
+      <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>每月預算限制</h3>
+      <div className="flex gap-3">
+        <input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
+        <button onClick={() => setShowSettings(false)} className="bg-[#596D48] text-white px-6 rounded-2xl font-black">儲存</button>
+      </div>
+    </div>
+
+    <div className={`border-t ${d.borderColor} pt-6`}>
+      <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>帳號</h3>
+      {user?.isAnonymous ? (
+        <div>
+          <p className={`text-xs ${d.textMuted} mb-3`}>連結 Google 帳號後，換手機也能看到所有資料</p>
+          <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
+            連結 Google 帳號
+          </button>
         </div>
+      ) : (
+        <div>
+          <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email}</p>
+          <button onClick={handleSignOut} className="w-full py-4 rounded-2xl bg-red-400 text-white font-black text-sm">
+            登出
+          </button>
+        </div>
+      )}
+    </div>
+
+  </div>
+)}
       </header>
 
       <main className="max-w-2xl mx-auto px-5 mt-8">
