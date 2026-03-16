@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signOut,
+  onAuthStateChanged,
+  GoogleAuthProvider,   // ← 新增：Google 登入提供者
+  signInWithPopup,      // ← 新增：用彈出視窗登入
+  linkWithPopup         // ← 新增：匿名帳號升級用
+} from "firebase/auth";
 import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { PlusCircle, MinusCircle, PieChart as PieChartIcon, List, Wallet, Search, Trash2, Settings, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
@@ -16,6 +24,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 const db = getFirestore(app);
 const APP_ID = 'matcha-finance-app';
 
@@ -113,7 +122,36 @@ export default function App() {
       if (formDetailsRef.current) formDetailsRef.current.open = false;
     } catch (err) { console.error(err); }
   };
+// 【情況一】使用者是第一次用，目前是匿名狀態
+// 用「升級」的方式連結 Google，保留原有資料
+const linkWithGoogle = async () => {
+  try {
+    await linkWithPopup(auth.currentUser, googleProvider);
+    alert("帳號連結成功！以後登入都能看到這些資料 ✓");
+  } catch (error) {
+    if (error.code === 'auth/credential-already-in-use') {
+      alert("這個 Google 帳號已經被使用過了");
+    } else {
+      alert("連結失敗：" + error.message);
+    }
+  }
+};
 
+// 【情況二】使用者已經登出，要重新登入
+const signInWithGoogle = async () => {
+  try {
+    await signInWithPopup(auth, googleProvider);
+    // 登入成功，onAuthStateChanged 會自動更新 user 狀態
+  } catch (error) {
+    alert("登入失敗：" + error.message);
+  }
+};
+
+// 【登出】
+const handleSignOut = async () => {
+  await signOut(auth); // 記得在 import 加上 signOut
+  // 登出後 onAuthStateChanged 會偵測到，自動執行 signInAnonymously
+};
   const deleteTx = async (id) => {
     if (!user) return;
     try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'transactions', id)); }
@@ -164,12 +202,27 @@ export default function App() {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-black tracking-tighter">抹茶記帳</h1>
             <div className="flex gap-2">
-              <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-white/20 rounded-2xl">
-                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-              <button onClick={() => setShowSettings(!showSettings)} className="p-3 bg-white/20 rounded-2xl">
-                <Settings className="w-5 h-5" />
-              </button>
+  <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-white/20 rounded-2xl">
+    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+  </button>
+
+  {user?.isAnonymous ? (
+    <button onClick={linkWithGoogle} className="p-3 bg-white/20 rounded-2xl text-xs font-black">
+      Google 登入
+    </button>
+  ) : (
+    <div className="flex items-center gap-2">
+      <span className="text-xs opacity-70">{user?.email}</span>
+      <button onClick={handleSignOut} className="p-3 bg-white/20 rounded-2xl text-xs font-black">
+        登出
+      </button>
+    </div>
+  )}
+
+  <button onClick={() => setShowSettings(!showSettings)} className="p-3 bg-white/20 rounded-2xl">
+    <Settings className="w-5 h-5" />
+  </button>
+</div>
             </div>
           </div>
           <div className="bg-[#596D48]/80 p-6 rounded-[2.5rem] text-center">
