@@ -6,8 +6,9 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup,
-  linkWithPopup
+  signInWithRedirect,
+  linkWithRedirect,
+  getRedirectResult
 } from "firebase/auth";
 import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { PlusCircle, MinusCircle, PieChart as PieChartIcon, List, Wallet, Search, Trash2, Settings, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
@@ -53,6 +54,12 @@ export default function App() {
       window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const formDetailsRef = useRef(null);
+
+  useEffect(() => {
+    getRedirectResult(auth).then((result) => {
+      if (result) alert("帳號連結成功！✓");
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (darkMode) {
@@ -125,22 +132,9 @@ export default function App() {
 
   const linkWithGoogle = async () => {
     try {
-      await linkWithPopup(auth.currentUser, googleProvider);
-      alert("帳號連結成功！以後登入都能看到這些資料 ✓");
+      await linkWithRedirect(auth.currentUser, googleProvider);
     } catch (error) {
-      if (error.code === 'auth/credential-already-in-use') {
-        alert("這個 Google 帳號已經被使用過了");
-      } else {
-        alert("連結失敗：" + error.message);
-      }
-    }
-  };
-
-  const signInWithGoogle = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      alert("登入失敗：" + error.message);
+      alert("連結失敗：" + error.message);
     }
   };
 
@@ -194,7 +188,6 @@ export default function App() {
   return (
     <div className={`min-h-screen ${d.bg} pb-32 ${d.text} transition-colors duration-300`}>
 
-      {/* ===== HEADER ===== */}
       <header className="bg-[#8FB996] text-white p-6 pt-16 rounded-b-[3rem] shadow-xl sticky top-0 z-40">
         <div className="max-w-2xl mx-auto">
           <div className="flex justify-between items-center mb-6">
@@ -215,10 +208,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* ===== MAIN ===== */}
       <main className="max-w-2xl mx-auto px-5 mt-8">
 
-        {/* 設定面板（齒輪打開後顯示） */}
         {showSettings && (
           <div className={`${d.card} rounded-3xl p-6 shadow-lg mb-8 space-y-6`}>
             <div>
@@ -374,7 +365,6 @@ export default function App() {
         )}
       </main>
 
-      {/* ===== NAV ===== */}
       <nav className={`fixed bottom-0 left-0 right-0 ${d.nav} backdrop-blur-xl border-t pb-8 pt-4 px-14 flex justify-between items-center z-50`}>
         <button onClick={() => setActiveTab('list')} className={`flex flex-col items-center gap-1 ${activeTab === 'list' ? 'text-[#596D48]' : d.textMuted}`}>
           <List className="w-6 h-6" />
