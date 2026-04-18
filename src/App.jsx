@@ -70,32 +70,11 @@ export default function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    // 先處理 Google redirect 結果，再決定是否匿名登入
-    // 避免 onAuthStateChanged 搶先執行 signInAnonymously 把 Google session 蓋掉
-    getRedirectResult(auth).then((result) => {
-      if (result?.user) {
-        // redirect 成功，onAuthStateChanged 會自動更新 user，不需額外處理
-        console.log("Google 連結/登入成功：", result.user.email);
-      }
-    }).catch((error) => {
-      if (error.code === 'auth/credential-already-in-use') {
-        // 該 Google 帳號已有獨立帳號，直接用 Google 登入
-        signInWithRedirect(auth, googleProvider);
-      } else if (error.code && error.code !== 'auth/no-auth-event') {
-        alert("連結失敗：" + error.message);
-      }
-    }).finally(() => {
-      // getRedirectResult 處理完後，再啟動 onAuthStateChanged 監聽
-      const unsubscribe = onAuthStateChanged(auth, (u) => {
-        if (!u) signInAnonymously(auth);
-        setUser(u);
-      });
-      // 注意：這裡無法在 useEffect cleanup 中 unsubscribe，改用 ref 管理
-      window._authUnsub = unsubscribe;
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (!u) signInAnonymously(auth);
+      setUser(u);
     });
-    return () => {
-      if (window._authUnsub) window._authUnsub();
-    };
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -150,7 +129,41 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  // 處理 redirect 回來後的結果（iOS/iPhone 相容）
+  useEffect(() => {
+    getRedirectResult(auth).then((result) => {
+      if (result?.user) {
+        console.log("Google 登入/連結成功", result.user.email);
+      }
+    }).catch((error) => {
+      if (error.code === 'auth/credential-already-in-use') {
+        // Google 帳號已存在，改直接用 Google 登入
+        signInWithRedirect(auth, googleProvider);
+      } else if (error.code && error.code !== 'auth/no-auth-event') {
+        alert("連結失敗：" + error.message);
+      }
+    });
+  }, []);
+
+  const isInAppBrowser = () => {
+    const ua = window.navigator.userAgent;
+    const isStandalone = window.navigator.standalone === true; // iOS PWA 模式
+    const isAndroidWebView = /wv/.test(ua);
+    return isStandalone || isAndroidWebView;
+  };
+
   const linkWithGoogle = async () => {
+    if (isInAppBrowser()) {
+      // PWA standalone 或 WebView 模式：Google 禁止 OAuth，引導用 Safari 開啟
+      const currentUrl = window.location.href;
+      const confirmed = window.confirm(
+        "📱 Google 登入需要在 Safari 中完成\n\n請點「確定」用 Safari 開啟抹茶記帳，再連結 Google 帳號。"
+      );
+      if (confirmed) {
+        window.open(currentUrl, '_blank');
+      }
+      return;
+    }
     try {
       if (auth.currentUser?.isAnonymous) {
         await linkWithRedirect(auth.currentUser, googleProvider);
@@ -273,6 +286,11 @@ export default function App() {
                   <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
                     連結 Google 帳號
                   </button>
+                  {window.navigator.standalone && (
+                    <p className={`text-xs ${d.textMuted} mt-2 text-center`}>
+                      💡 從桌面捷徑開啟時需要切換至 Safari 完成登入
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div>
