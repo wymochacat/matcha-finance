@@ -42,6 +42,7 @@ function parseLocalDate(dateStr) {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authDebug, setAuthDebug] = useState('');
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewDate, setViewDate] = useState(new Date());
@@ -69,13 +70,37 @@ export default function App() {
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
 
+  // ─── Auth：先處理 redirect 結果，再啟動監聽 ──────────────────────────────
+  // getRedirectResult 必須在 onAuthStateChanged 之前完成，
+  // 否則 signInAnonymously 會在 Google session 建立前搶先執行把結果蓋掉。
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) signInAnonymously(auth);
-      setUser(u);
-    });
+    let unsubscribe = () => {};
+
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          setAuthDebug('✅ 登入成功：' + result.user.email);
+        } else {
+          setAuthDebug('');
+        }
+      })
+      .catch((error) => {
+        if (error.code === 'auth/credential-already-in-use') {
+          signInWithRedirect(auth, googleProvider);
+        } else if (error.code && error.code !== 'auth/no-auth-event') {
+          setAuthDebug('❌ ' + error.code + ': ' + error.message);
+        }
+      })
+      .finally(() => {
+        unsubscribe = onAuthStateChanged(auth, (u) => {
+          if (!u) signInAnonymously(auth);
+          setUser(u);
+        });
+      });
+
     return () => unsubscribe();
   }, []);
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!user) return;
@@ -129,41 +154,7 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
-  // 處理 redirect 回來後的結果（iOS/iPhone 相容）
-  useEffect(() => {
-    getRedirectResult(auth).then((result) => {
-      if (result?.user) {
-        console.log("Google 登入/連結成功", result.user.email);
-      }
-    }).catch((error) => {
-      if (error.code === 'auth/credential-already-in-use') {
-        // Google 帳號已存在，改直接用 Google 登入
-        signInWithRedirect(auth, googleProvider);
-      } else if (error.code && error.code !== 'auth/no-auth-event') {
-        alert("連結失敗：" + error.message);
-      }
-    });
-  }, []);
-
-  const isInAppBrowser = () => {
-    const ua = window.navigator.userAgent;
-    const isStandalone = window.navigator.standalone === true; // iOS PWA 模式
-    const isAndroidWebView = /wv/.test(ua);
-    return isStandalone || isAndroidWebView;
-  };
-
   const linkWithGoogle = async () => {
-    if (isInAppBrowser()) {
-      // PWA standalone 或 WebView 模式：Google 禁止 OAuth，引導用 Safari 開啟
-      const currentUrl = window.location.href;
-      const confirmed = window.confirm(
-        "📱 Google 登入需要在 Safari 中完成\n\n請點「確定」用 Safari 開啟抹茶記帳，再連結 Google 帳號。"
-      );
-      if (confirmed) {
-        window.open(currentUrl, '_blank');
-      }
-      return;
-    }
     try {
       if (auth.currentUser?.isAnonymous) {
         await linkWithRedirect(auth.currentUser, googleProvider);
@@ -172,6 +163,7 @@ export default function App() {
       }
     } catch (error) {
       if (error.code !== 'auth/provider-already-linked') {
+        setAuthDebug('❌ ' + error.code + ': ' + error.message);
         alert("連結失敗：" + error.message);
       }
     }
@@ -286,11 +278,6 @@ export default function App() {
                   <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
                     連結 Google 帳號
                   </button>
-                  {window.navigator.standalone && (
-                    <p className={`text-xs ${d.textMuted} mt-2 text-center`}>
-                      💡 從桌面捷徑開啟時需要切換至 Safari 完成登入
-                    </p>
-                  )}
                 </div>
               ) : (
                 <div>
@@ -300,6 +287,11 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {authDebug ? (
+                <div className={`mt-3 p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-stone-100'}`}>
+                  <p className={`text-xs font-mono break-all ${d.textMuted}`}>{authDebug}</p>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
