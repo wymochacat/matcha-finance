@@ -6,7 +6,8 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  linkWithPopup
+  linkWithPopup,
+  signInWithPopup
 } from "firebase/auth";
 import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { PlusCircle, MinusCircle, PieChart as PieChartIcon, List, Wallet, Search, Trash2, Settings, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
@@ -33,7 +34,6 @@ const CATEGORIES = {
 };
 const COLORS = ['#8FB996', '#596D48', '#B1C595', '#708238', '#C2D5A8', '#4E5F3E', '#A4B494', '#6B8E23'];
 
-// ✅ Bug 2 Fix：本地時區解析日期，避免 UTC 差一天問題
 function parseLocalDate(dateStr) {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
@@ -49,7 +49,6 @@ export default function App() {
   const [category, setCategory] = useState(CATEGORIES.expense[0]);
   const [note, setNote] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  // ✅ Bug 3 Fix：budget 存為 Number
   const [budget, setBudget] = useState(15000);
   const [showSettings, setShowSettings] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,8 +58,6 @@ export default function App() {
       window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const formDetailsRef = useRef(null);
-
-  
 
   useEffect(() => {
     if (darkMode) {
@@ -124,7 +121,6 @@ export default function App() {
     if (!amount || !user) return;
     try {
       await addDoc(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'transactions'), {
-        // ✅ Bug 2 Fix：用本地時區解析，避免時區偏移導致日期差一天
         type, amount: parseFloat(amount), category, note, date: parseLocalDate(date), createdAt: Timestamp.now()
       });
       setAmount(''); setNote('');
@@ -132,20 +128,26 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
-const linkWithGoogle = async () => {
-  try {
-    await linkWithPopup(auth.currentUser, googleProvider);
-    alert("帳號連結成功！✓");
-  } catch (error) {
-    if (error.code === 'auth/provider-already-linked') {
-      alert("此帳號已連結 Google。");
-    } else if (error.code === 'auth/credential-already-in-use') {
-      alert("此 Google 帳號已被其他帳號使用。");
-    } else {
-      alert("連結失敗：" + error.message);
+  const linkWithGoogle = async () => {
+    try {
+      await linkWithPopup(auth.currentUser, googleProvider);
+      alert("帳號連結成功！✓");
+    } catch (error) {
+      if (error.code === 'auth/provider-already-linked') {
+        alert("此帳號已連結 Google。");
+      } else if (error.code === 'auth/credential-already-in-use') {
+        // Google 帳號已存在，直接登入
+        try {
+          await signInWithPopup(auth, googleProvider);
+          alert("已切換到 Google 帳號登入！✓");
+        } catch (e) {
+          alert("登入失敗：" + e.message);
+        }
+      } else {
+        alert("連結失敗：" + error.message);
+      }
     }
-  }
-};
+  };
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -157,7 +159,6 @@ const linkWithGoogle = async () => {
     catch (err) { console.error(err); }
   };
 
-  // ✅ Bug 1 Fix：月份切換不 mutate 原始 Date，改用 new Date(y, m) 建立全新物件
   const handlePrevMonth = () => {
     setViewDate(prev => {
       const d = new Date(prev);
@@ -213,7 +214,6 @@ const linkWithGoogle = async () => {
     </div>
   );
 
-  // ✅ Bug 3 Fix：確保 budget 是數字做計算
   const budgetNum = Number(budget) || 0;
 
   return (
@@ -246,7 +246,6 @@ const linkWithGoogle = async () => {
             <div>
               <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>每月預算限制</h3>
               <div className="flex gap-3">
-                {/* ✅ Bug 3 Fix：onChange 轉為 Number */}
                 <input type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
                 <button onClick={() => setShowSettings(false)} className="bg-[#596D48] text-white px-6 rounded-2xl font-black">儲存</button>
               </div>
@@ -262,7 +261,7 @@ const linkWithGoogle = async () => {
                 </div>
               ) : (
                 <div>
-                  <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email}</p>
+                  <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email || user?.displayName || '已連結 Google 帳號'}</p>
                   <button onClick={handleSignOut} className="w-full py-4 rounded-2xl bg-red-400 text-white font-black text-sm">
                     登出
                   </button>
@@ -274,7 +273,6 @@ const linkWithGoogle = async () => {
 
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className={`${d.card} rounded-3xl p-2 shadow-sm flex items-center justify-between`}>
-            {/* ✅ Bug 1 Fix：使用獨立函式，不直接 mutate viewDate */}
             <button onClick={handlePrevMonth} className="p-4 text-[#596D48]"><ChevronLeft /></button>
             <span className={`font-black ${d.textMuted} text-sm`}>{viewDate.getFullYear()}年 {viewDate.getMonth() + 1}月</span>
             <button onClick={handleNextMonth} className="p-4 text-[#596D48]"><ChevronRight /></button>
@@ -282,7 +280,6 @@ const linkWithGoogle = async () => {
           <div className={`${d.card} rounded-3xl p-5 shadow-sm`}>
             <div className={`flex justify-between text-xs mb-2 font-bold ${d.textMuted}`}>
               <span>本月消耗</span>
-              {/* ✅ Bug 3 Fix：使用 budgetNum 做除法 */}
               <span className={stats.monthExpense > budgetNum ? 'text-red-500' : 'text-[#8FB996]'}>{budgetNum > 0 ? Math.round((stats.monthExpense / budgetNum) * 100) : 0}%</span>
             </div>
             <div className={`w-full ${d.progressBg} rounded-full h-2.5 overflow-hidden`}>
