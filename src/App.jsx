@@ -70,11 +70,32 @@ export default function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) signInAnonymously(auth);
-      setUser(u);
+    // 先處理 Google redirect 結果，再決定是否匿名登入
+    // 避免 onAuthStateChanged 搶先執行 signInAnonymously 把 Google session 蓋掉
+    getRedirectResult(auth).then((result) => {
+      if (result?.user) {
+        // redirect 成功，onAuthStateChanged 會自動更新 user，不需額外處理
+        console.log("Google 連結/登入成功：", result.user.email);
+      }
+    }).catch((error) => {
+      if (error.code === 'auth/credential-already-in-use') {
+        // 該 Google 帳號已有獨立帳號，直接用 Google 登入
+        signInWithRedirect(auth, googleProvider);
+      } else if (error.code && error.code !== 'auth/no-auth-event') {
+        alert("連結失敗：" + error.message);
+      }
+    }).finally(() => {
+      // getRedirectResult 處理完後，再啟動 onAuthStateChanged 監聽
+      const unsubscribe = onAuthStateChanged(auth, (u) => {
+        if (!u) signInAnonymously(auth);
+        setUser(u);
+      });
+      // 注意：這裡無法在 useEffect cleanup 中 unsubscribe，改用 ref 管理
+      window._authUnsub = unsubscribe;
     });
-    return () => unsubscribe();
+    return () => {
+      if (window._authUnsub) window._authUnsub();
+    };
   }, []);
 
   useEffect(() => {
@@ -128,22 +149,6 @@ export default function App() {
       if (formDetailsRef.current) formDetailsRef.current.open = false;
     } catch (err) { console.error(err); }
   };
-
-  // 處理 redirect 回來後的結果（iOS/iPhone 相容）
-  useEffect(() => {
-    getRedirectResult(auth).then((result) => {
-      if (result?.user) {
-        console.log("Google 登入/連結成功", result.user.email);
-      }
-    }).catch((error) => {
-      if (error.code === 'auth/credential-already-in-use') {
-        // Google 帳號已存在，改直接用 Google 登入
-        signInWithRedirect(auth, googleProvider);
-      } else if (error.code && error.code !== 'auth/no-auth-event') {
-        alert("連結失敗：" + error.message);
-      }
-    });
-  }, []);
 
   const linkWithGoogle = async () => {
     try {
