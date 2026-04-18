@@ -16,7 +16,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } 
 
 const firebaseConfig = {
   apiKey: "AIzaSyDZwLj5uqNsKh0CXjLOD1bfaiyRxcB06mw",
-  authDomain: "matcha-finance-c0ded.firebaseapp.com",
+  remarkable-haupia-a29fc0.netlify.app
   projectId: "matcha-finance-c0ded",
   storageBucket: "matcha-finance-c0ded.firebasestorage.app",
   messagingSenderId: "1093233452978",
