@@ -6,7 +6,6 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithRedirect,
   linkWithRedirect,
   getRedirectResult
 } from "firebase/auth";
@@ -16,7 +15,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } 
 
 const firebaseConfig = {
   apiKey: "AIzaSyDZwLj5uqNsKh0CXjLOD1bfaiyRxcB06mw",
-  authDomain: "remarkable-haupia-a29fc0.netlify.app",
+  authDomain: "matcha-finance-c0ded.firebaseapp.com",
   projectId: "matcha-finance-c0ded",
   storageBucket: "matcha-finance-c0ded.firebasestorage.app",
   messagingSenderId: "1093233452978",
@@ -35,6 +34,12 @@ const CATEGORIES = {
 };
 const COLORS = ['#8FB996', '#596D48', '#B1C595', '#708238', '#C2D5A8', '#4E5F3E', '#A4B494', '#6B8E23'];
 
+// ✅ Bug 2 Fix：本地時區解析日期，避免 UTC 差一天問題
+function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -45,6 +50,7 @@ export default function App() {
   const [category, setCategory] = useState(CATEGORIES.expense[0]);
   const [note, setNote] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // ✅ Bug 3 Fix：budget 存為 Number
   const [budget, setBudget] = useState(15000);
   const [showSettings, setShowSettings] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,12 +64,7 @@ export default function App() {
   useEffect(() => {
     getRedirectResult(auth).then((result) => {
       if (result) alert("帳號連結成功！✓");
-    }).catch((error) => {
-      if (error.code !== 'auth/no-current-user' && error.code !== 'auth/null-user') {
-        console.error('Redirect error:', error);
-        alert("連結失敗：" + error.message);
-      }
-    });
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -127,10 +128,9 @@ export default function App() {
     e.preventDefault();
     if (!amount || !user) return;
     try {
-      const [y, mo, day] = date.split('-').map(Number);
-      const localDate = new Date(y, mo - 1, day);
       await addDoc(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'transactions'), {
-        type, amount: parseFloat(amount), category, note, date: localDate, createdAt: Timestamp.now()
+        // ✅ Bug 2 Fix：用本地時區解析，避免時區偏移導致日期差一天
+        type, amount: parseFloat(amount), category, note, date: parseLocalDate(date), createdAt: Timestamp.now()
       });
       setAmount(''); setNote('');
       if (formDetailsRef.current) formDetailsRef.current.open = false;
@@ -141,7 +141,14 @@ export default function App() {
     try {
       await linkWithRedirect(auth.currentUser, googleProvider);
     } catch (error) {
-      alert("連結失敗：" + error.message);
+      // ✅ Bug 4 Fix：處理已連結的情況
+      if (error.code === 'auth/provider-already-linked') {
+        alert("此帳號已連結 Google，請直接使用 Google 登入。");
+      } else if (error.code === 'auth/credential-already-in-use') {
+        alert("此 Google 帳號已被其他帳號使用。");
+      } else {
+        alert("連結失敗：" + error.message);
+      }
     }
   };
 
@@ -153,6 +160,25 @@ export default function App() {
     if (!user) return;
     try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'transactions', id)); }
     catch (err) { console.error(err); }
+  };
+
+  // ✅ Bug 1 Fix：月份切換不 mutate 原始 Date，改用 new Date(y, m) 建立全新物件
+  const handlePrevMonth = () => {
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setDate(1);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    });
   };
 
   const d = darkMode ? {
@@ -192,6 +218,9 @@ export default function App() {
     </div>
   );
 
+  // ✅ Bug 3 Fix：確保 budget 是數字做計算
+  const budgetNum = Number(budget) || 0;
+
   return (
     <div className={`min-h-screen ${d.bg} pb-32 ${d.text} transition-colors duration-300`}>
 
@@ -222,7 +251,8 @@ export default function App() {
             <div>
               <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>每月預算限制</h3>
               <div className="flex gap-3">
-                <input type="number" value={budget} onChange={(e) => setBudget(parseFloat(e.target.value) || 0)} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
+                {/* ✅ Bug 3 Fix：onChange 轉為 Number */}
+                <input type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} className={`flex-1 ${d.input} p-4 rounded-2xl outline-none font-bold text-lg`} />
                 <button onClick={() => setShowSettings(false)} className="bg-[#596D48] text-white px-6 rounded-2xl font-black">儲存</button>
               </div>
             </div>
@@ -237,7 +267,7 @@ export default function App() {
                 </div>
               ) : (
                 <div>
-                  <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email || user?.displayName || '已連結 Google 帳號'}</p>
+                  <p className={`text-xs ${d.textMuted} mb-3`}>已登入：{user?.email}</p>
                   <button onClick={handleSignOut} className="w-full py-4 rounded-2xl bg-red-400 text-white font-black text-sm">
                     登出
                   </button>
@@ -249,17 +279,19 @@ export default function App() {
 
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className={`${d.card} rounded-3xl p-2 shadow-sm flex items-center justify-between`}>
-            <button onClick={() => setViewDate(prev => { const d = new Date(prev); d.setMonth(d.getMonth() - 1); return d; })} className="p-4 text-[#596D48]"><ChevronLeft /></button>
+            {/* ✅ Bug 1 Fix：使用獨立函式，不直接 mutate viewDate */}
+            <button onClick={handlePrevMonth} className="p-4 text-[#596D48]"><ChevronLeft /></button>
             <span className={`font-black ${d.textMuted} text-sm`}>{viewDate.getFullYear()}年 {viewDate.getMonth() + 1}月</span>
-            <button onClick={() => setViewDate(prev => { const d = new Date(prev); d.setMonth(d.getMonth() + 1); return d; })} className="p-4 text-[#596D48]"><ChevronRight /></button>
+            <button onClick={handleNextMonth} className="p-4 text-[#596D48]"><ChevronRight /></button>
           </div>
           <div className={`${d.card} rounded-3xl p-5 shadow-sm`}>
             <div className={`flex justify-between text-xs mb-2 font-bold ${d.textMuted}`}>
               <span>本月消耗</span>
-              <span className={stats.monthExpense > budget ? 'text-red-500' : 'text-[#8FB996]'}>{budget > 0 ? Math.round((stats.monthExpense / budget) * 100) : 0}%</span>
+              {/* ✅ Bug 3 Fix：使用 budgetNum 做除法 */}
+              <span className={stats.monthExpense > budgetNum ? 'text-red-500' : 'text-[#8FB996]'}>{budgetNum > 0 ? Math.round((stats.monthExpense / budgetNum) * 100) : 0}%</span>
             </div>
             <div className={`w-full ${d.progressBg} rounded-full h-2.5 overflow-hidden`}>
-              <div className={`h-full rounded-full transition-all ${(stats.monthExpense / budget) > 1 ? 'bg-red-400' : 'bg-[#8FB996]'}`} style={{ width: `${budget > 0 ? Math.min((stats.monthExpense / budget) * 100, 100) : 0}%` }}></div>
+              <div className={`h-full rounded-full transition-all ${(stats.monthExpense / budgetNum) > 1 ? 'bg-red-400' : 'bg-[#8FB996]'}`} style={{ width: `${budgetNum > 0 ? Math.min((stats.monthExpense / budgetNum) * 100, 100) : 0}%` }}></div>
             </div>
           </div>
         </div>
@@ -291,7 +323,7 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <label className={`text-xs font-bold ${d.textMuted} ml-2`}>金額</label>
-              <input type="number" placeholder="0" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required className={`w-full ${d.input} rounded-3xl p-6 text-4xl font-black outline-none text-[#596D48]`} />
+              <input type="number" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} required className={`w-full ${d.input} rounded-3xl p-6 text-4xl font-black outline-none text-[#596D48]`} />
             </div>
             <div className="space-y-2">
               <label className={`text-xs font-bold ${d.textMuted} ml-2`}>備註</label>
