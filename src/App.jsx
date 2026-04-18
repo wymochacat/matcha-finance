@@ -6,8 +6,9 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  linkWithPopup,
-  signInWithPopup
+  linkWithRedirect,
+  signInWithRedirect,
+  getRedirectResult
 } from "firebase/auth";
 import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { PlusCircle, MinusCircle, PieChart as PieChartIcon, List, Wallet, Search, Trash2, Settings, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
@@ -128,22 +129,31 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  // 處理 redirect 回來後的結果（iOS/iPhone 相容）
+  useEffect(() => {
+    getRedirectResult(auth).then((result) => {
+      if (result?.user) {
+        console.log("Google 登入/連結成功", result.user.email);
+      }
+    }).catch((error) => {
+      if (error.code === 'auth/credential-already-in-use') {
+        // Google 帳號已存在，改直接用 Google 登入
+        signInWithRedirect(auth, googleProvider);
+      } else if (error.code && error.code !== 'auth/no-auth-event') {
+        alert("連結失敗：" + error.message);
+      }
+    });
+  }, []);
+
   const linkWithGoogle = async () => {
     try {
-      await linkWithPopup(auth.currentUser, googleProvider);
-      alert("帳號連結成功！✓");
-    } catch (error) {
-      if (error.code === 'auth/provider-already-linked') {
-        alert("此帳號已連結 Google。");
-      } else if (error.code === 'auth/credential-already-in-use') {
-        // Google 帳號已存在，直接登入
-        try {
-          await signInWithPopup(auth, googleProvider);
-          alert("已切換到 Google 帳號登入！✓");
-        } catch (e) {
-          alert("登入失敗：" + e.message);
-        }
+      if (auth.currentUser?.isAnonymous) {
+        await linkWithRedirect(auth.currentUser, googleProvider);
       } else {
+        await signInWithRedirect(auth, googleProvider);
+      }
+    } catch (error) {
+      if (error.code !== 'auth/provider-already-linked') {
         alert("連結失敗：" + error.message);
       }
     }
