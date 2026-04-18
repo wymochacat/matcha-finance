@@ -70,10 +70,30 @@ export default function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) signInAnonymously(auth);
-      setUser(u);
-    });
+    let unsubscribe = () => {};
+    const startAuthListener = () => {
+      unsubscribe = onAuthStateChanged(auth, (u) => {
+        if (!u) signInAnonymously(auth);
+        setUser(u);
+      });
+    };
+    // 先處理 redirect 結果，再啟動監聽，避免 signInAnonymously 覆蓋 Google session
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          console.log("Google 連結/登入成功：", result.user.email);
+        }
+      })
+      .catch((error) => {
+        if (error.code === 'auth/credential-already-in-use') {
+          signInWithRedirect(auth, googleProvider);
+        } else if (error.code && error.code !== 'auth/no-auth-event') {
+          console.error("Redirect 錯誤：", error.code, error.message);
+        }
+      })
+      .finally(() => {
+        startAuthListener();
+      });
     return () => unsubscribe();
   }, []);
 
@@ -129,39 +149,14 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
-  // 處理 redirect 回來後的結果（iOS/iPhone 相容）
-  useEffect(() => {
-    getRedirectResult(auth).then((result) => {
-      if (result?.user) {
-        console.log("Google 登入/連結成功", result.user.email);
-      }
-    }).catch((error) => {
-      if (error.code === 'auth/credential-already-in-use') {
-        // Google 帳號已存在，改直接用 Google 登入
-        signInWithRedirect(auth, googleProvider);
-      } else if (error.code && error.code !== 'auth/no-auth-event') {
-        alert("連結失敗：" + error.message);
-      }
-    });
-  }, []);
-
-  const isInAppBrowser = () => {
-    const ua = window.navigator.userAgent;
-    const isStandalone = window.navigator.standalone === true; // iOS PWA 模式
-    const isAndroidWebView = /wv/.test(ua);
-    return isStandalone || isAndroidWebView;
-  };
+  const isPWAStandalone = () => window.navigator.standalone === true;
 
   const linkWithGoogle = async () => {
-    if (isInAppBrowser()) {
-      // PWA standalone 或 WebView 模式：Google 禁止 OAuth，引導用 Safari 開啟
-      const currentUrl = window.location.href;
-      const confirmed = window.confirm(
-        "📱 Google 登入需要在 Safari 中完成\n\n請點「確定」用 Safari 開啟抹茶記帳，再連結 Google 帳號。"
+    if (isPWAStandalone()) {
+      // PWA 桌面捷徑模式：Google 禁止 OAuth，必須引導用戶用 Safari 操作
+      alert(
+        "⚠️ 請用 Safari 完成 Google 登入\n\n步驟：\n1. 點右下角分享按鈕 □↑\n2. 選「用 Safari 開啟」\n3. 在 Safari 裡點「連結 Google 帳號」\n4. 登入後加回主畫面即可"
       );
-      if (confirmed) {
-        window.open(currentUrl, '_blank');
-      }
       return;
     }
     try {
@@ -282,14 +277,25 @@ export default function App() {
               <h3 className={`font-black ${d.textMuted} mb-4 text-sm`}>帳號</h3>
               {user?.isAnonymous ? (
                 <div>
-                  <p className={`text-xs ${d.textMuted} mb-3`}>連結 Google 帳號後，換手機也能看到所有資料</p>
-                  <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
-                    連結 Google 帳號
-                  </button>
-                  {window.navigator.standalone && (
-                    <p className={`text-xs ${d.textMuted} mt-2 text-center`}>
-                      💡 從桌面捷徑開啟時需要切換至 Safari 完成登入
-                    </p>
+                  {window.navigator.standalone ? (
+                    // PWA 桌面捷徑模式：顯示操作說明
+                    <div className={`rounded-2xl p-4 ${darkMode ? 'bg-yellow-900/30 border border-yellow-700/50' : 'bg-yellow-50 border border-yellow-200'}`}>
+                      <p className={`text-xs font-black mb-2 ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>⚠️ 請用 Safari 完成 Google 登入</p>
+                      <p className={`text-xs ${d.textMuted} leading-5`}>
+                        1. 點底部右邊的分享按鈕 □↑{'\n'}
+                        2. 選「用 Safari 開啟」{'\n'}
+                        3. 在 Safari 裡點「連結 Google 帳號」{'\n'}
+                        4. 登入後重新加入主畫面
+                      </p>
+                    </div>
+                  ) : (
+                    // 一般 Safari 模式：顯示正常按鈕
+                    <>
+                      <p className={`text-xs ${d.textMuted} mb-3`}>連結 Google 帳號後，換手機也能看到所有資料</p>
+                      <button onClick={linkWithGoogle} className="w-full py-4 rounded-2xl bg-[#596D48] text-white font-black text-sm">
+                        連結 Google 帳號
+                      </button>
+                    </>
                   )}
                 </div>
               ) : (
