@@ -6,8 +6,7 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  linkWithRedirect,
-  getRedirectResult
+  linkWithPopup
 } from "firebase/auth";
 import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { PlusCircle, MinusCircle, PieChart as PieChartIcon, List, Wallet, Search, Trash2, Settings, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
@@ -61,11 +60,7 @@ export default function App() {
   });
   const formDetailsRef = useRef(null);
 
-  useEffect(() => {
-    getRedirectResult(auth).then((result) => {
-      if (result) alert("帳號連結成功！✓");
-    }).catch(() => {});
-  }, []);
+  
 
   useEffect(() => {
     if (darkMode) {
@@ -137,20 +132,20 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
-  const linkWithGoogle = async () => {
-    try {
-      await linkWithRedirect(auth.currentUser, googleProvider);
-    } catch (error) {
-      // ✅ Bug 4 Fix：處理已連結的情況
-      if (error.code === 'auth/provider-already-linked') {
-        alert("此帳號已連結 Google，請直接使用 Google 登入。");
-      } else if (error.code === 'auth/credential-already-in-use') {
-        alert("此 Google 帳號已被其他帳號使用。");
-      } else {
-        alert("連結失敗：" + error.message);
-      }
+const linkWithGoogle = async () => {
+  try {
+    await linkWithPopup(auth.currentUser, googleProvider);
+    alert("帳號連結成功！✓");
+  } catch (error) {
+    if (error.code === 'auth/provider-already-linked') {
+      alert("此帳號已連結 Google。");
+    } else if (error.code === 'auth/credential-already-in-use') {
+      alert("此 Google 帳號已被其他帳號使用。");
+    } else {
+      alert("連結失敗：" + error.message);
     }
-  };
+  }
+};
 
   const handleSignOut = async () => {
     await signOut(auth);
